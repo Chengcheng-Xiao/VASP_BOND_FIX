@@ -1,0 +1,328 @@
+diff -ruN src/.objects src_mod/.objects
+--- src/.objects	2017-04-20 17:04:05.000000000 +0800
++++ src_mod/.objects	2018-05-18 10:53:21.000000000 +0800
+@@ -129,6 +129,7 @@
+ 	pardens.o \
+ 	optics.o \
+ 	constr_cell_relax.o \
++        constrain.o \
+ 	stm.o \
+ 	finite_diff.o \
+ 	elpol.o \
+diff -ruN src/constrain.F src_mod/constrain.F
+--- src/constrain.F	1970-01-01 08:00:00.000000000 +0800
++++ src_mod/constrain.F	2018-05-18 10:53:21.000000000 +0800
+@@ -0,0 +1,252 @@
++!*********************************************************************
++!
++! subroutine to constrain force (added in GaTech for fixing bond length)
++!
++!*********************************************************************
++
++      SUBROUTINE RD_CONSTRAIN(ION1,ION2,DIST12)
++      USE lattice
++      USE poscar
++      IMPLICIT NONE
++
++
++      INTEGER ION1,ION2
++      REAL(q)  DIST12     
++      ION1=0
++      ION2=0
++      DIST12=0.0 
++
++      OPEN(UNIT=777,FILE='CONSTRAIN',STATUS='OLD',ERR=900)
++      READ(777,*) ION1,ION2,DIST12
++      CLOSE(UNIT=777)
++    
++!     WRITE(*,*) 'ION1=',ION1,'ION2=',ION2,'d=',DIST12
++
++ 900  CONTINUE
++      END SUBROUTINE
++
++
++
++      SUBROUTINE CONSTRAIN_FORCE(T_INFO,VEL,TIFOR,POS,LATT_CUR)
++      USE lattice
++      USE poscar
++      IMPLICIT NONE
++
++      TYPE (latt)        LATT_CUR
++      TYPE (type_info)   T_INFO
++      REAL(q)  TIFOR(3,T_INFO%NIONS),VEL(3,T_INFO%NIONS)
++      REAL(q)  POS(3,T_INFO%NIONS)
++! local
++      INTEGER ION1,ION2
++      REAL(q) DIST12,DDIST12
++      REAL(q) POS1(3),POS2(3),TANVEC(3),TANC
++      REAL(q) TANF1,TANF2,TANAVEF
++
++      CALL RD_CONSTRAIN(ION1,ION2,DIST12)
++      IF ((ION1 .EQ. 0) .OR. (ION2 .EQ. 0) .OR. (DIST12 .EQ. 0._q)) THEN
++!         WRITE(*,*) 'Failed to read CONSTRAIN.'
++         GOTO 800
++      ENDIF
++
++      POS1(1)=POS(1,ION1)
++      POS1(2)=POS(2,ION1)
++      POS1(3)=POS(3,ION1)
++      CALL DIRKAR(1, POS1, LATT_CUR%A)
++      POS2(1)=POS(1,ION2)
++      POS2(2)=POS(2,ION2)
++      POS2(3)=POS(3,ION2)
++      CALL DIRKAR(1, POS2, LATT_CUR%A)
++
++      TANVEC(1)=POS2(1)-POS1(1)
++      TANVEC(2)=POS2(2)-POS1(2)
++      TANVEC(3)=POS2(3)-POS1(3)
++      TANC=(TANVEC(1)**2.0+TANVEC(2)**2.0+TANVEC(3)**2.0)**0.5
++      DDIST12=TANC-DIST12
++      TANVEC(1)=TANVEC(1)/TANC
++      TANVEC(2)=TANVEC(2)/TANC
++      TANVEC(3)=TANVEC(3)/TANC
++
++      TANF1=TIFOR(1,ION1)*TANVEC(1)
++      TANF1=TANF1+TIFOR(2,ION1)*TANVEC(2)
++      TANF1=TANF1+TIFOR(3,ION1)*TANVEC(3)
++      TANF2=TIFOR(1,ION2)*TANVEC(1)
++      TANF2=TANF2+TIFOR(2,ION2)*TANVEC(2)
++      TANF2=TANF2+TIFOR(3,ION2)*TANVEC(3)
++ 
++      TANAVEF=(TANF1+TANF2)*0.5
++
++      TIFOR(1,ION1)=TIFOR(1,ION1)-TANF1*TANVEC(1)
++      TIFOR(2,ION1)=TIFOR(2,ION1)-TANF1*TANVEC(2)
++      TIFOR(3,ION1)=TIFOR(3,ION1)-TANF1*TANVEC(3)
++      TIFOR(1,ION2)=TIFOR(1,ION2)-TANF2*TANVEC(1)
++      TIFOR(2,ION2)=TIFOR(2,ION2)-TANF2*TANVEC(2)
++      TIFOR(3,ION2)=TIFOR(3,ION2)-TANF2*TANVEC(3)
++
++      IF ((T_INFO%LSFOR(1,ION1)).AND.(T_INFO%LSFOR(1,ION2))) THEN
++         TIFOR(1,ION1)=TIFOR(1,ION1)+TANAVEF*TANVEC(1)
++         TIFOR(1,ION2)=TIFOR(1,ION2)+TANAVEF*TANVEC(1)
++      ENDIF
++      IF ((T_INFO%LSFOR(2,ION1)).AND.(T_INFO%LSFOR(2,ION2))) THEN
++         TIFOR(2,ION1)=TIFOR(2,ION1)+TANAVEF*TANVEC(2)
++         TIFOR(2,ION2)=TIFOR(2,ION2)+TANAVEF*TANVEC(2)
++      ENDIF
++      IF ((T_INFO%LSFOR(3,ION1)).AND.(T_INFO%LSFOR(3,ION2))) THEN
++         TIFOR(3,ION1)=TIFOR(3,ION1)+TANAVEF*TANVEC(3)
++         TIFOR(3,ION2)=TIFOR(3,ION2)+TANAVEF*TANVEC(3)
++      ENDIF
++
++      VEL(1,ION1)=0._q
++      VEL(2,ION1)=0._q
++      VEL(3,ION1)=0._q
++      VEL(1,ION2)=0._q
++      VEL(2,ION2)=0._q
++      VEL(3,ION2)=0._q
++
++!      WRITE(*,*) 'CONSTRAIN_FORCE is done.'
++
++ 800  CONTINUE
++      END SUBROUTINE
++
++
++
++
++
++      SUBROUTINE CONSTRAIN_POSITION(T_INFO,POS,LATT_CUR)
++      USE lattice
++      USE poscar
++      IMPLICIT NONE
++
++      TYPE (latt)        LATT_CUR
++      TYPE (type_info)   T_INFO
++      REAL(q)  POS(3,T_INFO%NIONS)
++! local
++      INTEGER ION1,ION2
++      REAL(q) DIST12,DDIST12
++      REAL(q) POS1(3),POS2(3),TANVEC(3),TANC
++      REAL(q) TANF1,TANF2,TANAVEF(3)
++
++      CALL RD_CONSTRAIN(ION1,ION2,DIST12)
++      IF ((ION1 .EQ. 0) .OR. (ION2 .EQ. 0) .OR. (DIST12 .EQ. 0._q)) THEN
++!         WRITE(*,*) 'Failed to read CONSTRAIN.'
++         GOTO 700
++      ENDIF
++      
++      POS1(1)=POS(1,ION1)
++      POS1(2)=POS(2,ION1)
++      POS1(3)=POS(3,ION1)
++      CALL DIRKAR(1, POS1, LATT_CUR%A)
++      POS2(1)=POS(1,ION2)
++      POS2(2)=POS(2,ION2)
++      POS2(3)=POS(3,ION2)
++      CALL DIRKAR(1, POS2, LATT_CUR%A)
++
++      TANVEC(1)=POS2(1)-POS1(1)
++      TANVEC(2)=POS2(2)-POS1(2)
++      TANVEC(3)=POS2(3)-POS1(3)
++      TANC=(TANVEC(1)**2.0+TANVEC(2)**2.0+TANVEC(3)**2.0)**0.5
++      DDIST12=TANC-DIST12
++      TANVEC(1)=TANVEC(1)/TANC
++      TANVEC(2)=TANVEC(2)/TANC
++      TANVEC(3)=TANVEC(3)/TANC
++
++      IF ((T_INFO%LSFOR(1,ION1)).AND.(T_INFO%LSFOR(1,ION2))) THEN
++         POS1(1)=POS1(1)+0.5*DDIST12*TANVEC(1)
++         POS2(1)=POS2(1)-0.5*DDIST12*TANVEC(1)
++      ENDIF
++      IF ((T_INFO%LSFOR(2,ION1)).AND.(T_INFO%LSFOR(2,ION2))) THEN
++         POS1(2)=POS1(2)+0.5*DDIST12*TANVEC(2)
++         POS2(2)=POS2(2)-0.5*DDIST12*TANVEC(2)
++      ENDIF
++      IF ((T_INFO%LSFOR(3,ION1)).AND.(T_INFO%LSFOR(3,ION2))) THEN
++         POS1(3)=POS1(3)+0.5*DDIST12*TANVEC(3)
++         POS2(3)=POS2(3)-0.5*DDIST12*TANVEC(3)
++      ENDIF
++
++      IF ((.NOT.T_INFO%LSFOR(1,ION1)).AND.(T_INFO%LSFOR(1,ION2))) THEN
++         POS2(1)=POS2(1)-DDIST12*TANVEC(1)
++      ENDIF
++      IF ((.NOT.T_INFO%LSFOR(2,ION1)).AND.(T_INFO%LSFOR(2,ION2))) THEN
++         POS2(2)=POS2(2)-DDIST12*TANVEC(2)
++      ENDIF
++      IF ((.NOT.T_INFO%LSFOR(3,ION1)).AND.(T_INFO%LSFOR(3,ION2))) THEN
++         POS2(3)=POS2(3)-DDIST12*TANVEC(3)
++      ENDIF
++
++      IF ((T_INFO%LSFOR(1,ION1)).AND.(.NOT.T_INFO%LSFOR(1,ION2))) THEN
++         POS1(1)=POS1(1)+DDIST12*TANVEC(1)
++      ENDIF
++      IF ((T_INFO%LSFOR(2,ION1)).AND.(.NOT.T_INFO%LSFOR(2,ION2))) THEN
++         POS1(2)=POS1(2)+DDIST12*TANVEC(2)
++      ENDIF
++      IF ((T_INFO%LSFOR(3,ION1)).AND.(.NOT.T_INFO%LSFOR(3,ION2))) THEN
++         POS1(3)=POS1(3)+DDIST12*TANVEC(3)
++      ENDIF
++
++      CALL KARDIR(1,POS1,LATT_CUR%B)
++      CALL KARDIR(1,POS2,LATT_CUR%B)
++
++      POS(1,ION1)=POS1(1)
++      POS(2,ION1)=POS1(2)
++      POS(3,ION1)=POS1(3)
++      POS(1,ION2)=POS2(1)
++      POS(2,ION2)=POS2(2)
++      POS(3,ION2)=POS2(3)
++
++!      WRITE(*,*) 'CONSTRAIN_POSITION is done.'
++
++ 700  CONTINUE
++      END SUBROUTINE
++
++
++      SUBROUTINE WRITE_XYZTRAJ(MDSTEP,T_INFO,POS,LATT_CUR)
++      USE lattice
++      USE poscar
++      IMPLICIT NONE
++
++      TYPE (latt)        LATT_CUR
++      TYPE (type_info)   T_INFO
++      REAL(q)  POS(3,T_INFO%NIONS)
++! local
++      INTEGER MDSTEP,ION1,ION2
++      REAL(q) X, Y, Z
++      REAL(q) POS1(3)
++      CHARACTER*2 TYPENAME(T_INFO%NTYP)
++      INTEGER TYPENAMEOX
++
++      TYPENAMEOX = 0
++      OPEN(UNIT=777,FILE='TYPENAME',STATUS='OLD',ERR=600)
++      DO ION1 = 1, T_INFO%NTYP
++       READ(777,*) TYPENAME(ION1)
++      ENDDO
++      TYPENAMEOX = 1
++      CLOSE(UNIT=777)
++
++!      OPEN(UNIT=888,FILE='XYZTRAJ',STATUS='UNKNOWN',ERR=600)
++
++      WRITE(888,'(i4)') MDSTEP
++      WRITE(888,'(i4)') T_INFO%NIONS
++!   88 FORMAT(i4) 
++      DO ION1 = 1, T_INFO%NIONS
++       POS1(1)=POS(1,ION1)
++       POS1(2)=POS(2,ION1)
++       POS1(3)=POS(3,ION1)
++       CALL DIRKAR(1, POS1, LATT_CUR%A)
++       X = POS1(1)-LATT_CUR%A(1,1)*0.5
++       Y = POS1(2)-LATT_CUR%A(2,2)*0.5
++       Z = POS1(3)-LATT_CUR%A(3,3)*0.5
++       IF (TYPENAMEOX .EQ. 1) THEN
++        WRITE (888,89) TYPENAME(T_INFO%ITYP(ION1)), X, Y, Z
++   89 FORMAT(a2,1x,f10.5,1x,f10.5,1x,f10.5) 
++       ELSE
++        WRITE (888,90) T_INFO%ITYP(ION1), X, Y, Z
++   90 FORMAT(i3,1x,f10.5,1x,f10.5,1x,f10.5) 
++       ENDIF
++      ENDDO
++
++!      CLOSE(UNIT=888)
++
++ 600  CONTINUE
++      END SUBROUTINE
++
++
++
+diff -ruN src/main.F src_mod/main.F
+--- src/main.F	2017-04-20 17:03:58.000000000 +0800
++++ src_mod/main.F	2018-05-18 10:53:21.000000000 +0800
+@@ -256,6 +256,8 @@
+       INTEGER :: TIU6, TIU0
+       INTEGER :: ISPECIAL=0         ! allows to select special undocumented features
+       INTEGER :: MDALGO=0           ! dublicates MDALGO in tbdyn
++      INTEGER :: LOOPDONE           ! Add by Chengcheng Xiao, A convergence criteria for fixing bond length.
++      REAL(kind=8) :: DETMP         ! Add by Chengcheng Xiao, A temporary item storing energy difference.
+ !=======================================================================
+ !  begin array dimensions ...
+ !=======================================================================
+@@ -3125,6 +3127,9 @@
+ ! add chain forces and constrain forces
+ !=======================================================================
+       CALL VCA_FORCE(T_INFO, TIFOR)
++! added in GaTech for fixing bond length
++      CALL CONSTRAIN_FORCE(T_INFO,DYN%VEL,TIFORCE,DYN%POSION,LATT_CUR)
++
+ 
+       IF (DYN%IBRION /=5 .AND. DYN%IBRION /=6  .AND. DYN%IBRION /=7 ) &
+       CALL SET_SELECTED_FORCES_ZERO(T_INFO,DYN%VEL,TIFOR,LATT_CUR)
+@@ -3571,6 +3576,16 @@
+ !  do relaxations using diverse algorithms
+ !-----------------------------------------------------------------------
+         ! change of the energy between two ionic step used as stopping criterion
++!-----------------------------------------------------------------------
++! Add by Chengchegn Xiao, following block to determin the convergence
++        LOOPDONE=.FALSE.
++!        WRITE(*,*) DETMP,LOOPDONE
++        IF (ABS(DETMP-(TOTEN-TOTENG))<0.00001) THEN
++!          WRITE(*,*) "STABLE"
++          LOOPDONE=.TRUE.
++        ENDIF
++        DETMP=TOTEN-TOTENG
++!----------------------------------------------------------------------
+         INFO%LSTOP=(ABS(TOTEN-TOTENG)<DYN%EDIFFG)
+         
+         CALLMPI_C ( and_chain( LSTOP2 ))
+@@ -3664,6 +3679,9 @@
+         ELSE IF (DYN%IBRION==11) THEN
+            CALL INPOS(LATT_CUR, T_INFO, DYN, IO%IU6, IO%IU0, INFO%LSTOP, WDES%COMM)
+         ENDIF
++! position constrain added in GaTech for fixing bond length
++        CALL CONSTRAIN_POSITION(T_INFO,DYN%POSION,LATT_CUR)
++
+ 
+ ! restrict volume for constant volume relaxation
+         IF (DYN%ISIF==4 .OR. DYN%ISIF==5) THEN
+@@ -3691,7 +3709,10 @@
+            CALL WAVPRE(GRIDC,P,PRED,T_INFO,W,WDES,LATT_CUR,IO%LOPEN, &
+                 CHTOT,RHOLM,N_MIX_PAW, CSTRF, LMDIM,CQIJ,INFO%LOVERL,IO%IU0)
+         ENDIF
+-
++!----------------------------------------------------------------------
++! Add by Chengchegn Xiao to exit loop
++        INFO%LSTOP=LOOPDONE
++!----------------------------------------------------------------------
+         ! use forces as stopping criterion if EDIFFG<0
+         IF (DYN%EDIFFG<0) INFO%LSTOP=LSTOP2
+         io_begin
