@@ -1,7 +1,15 @@
 diff -ruN src/.objects src_mod/.objects
 --- src/.objects	2017-04-20 17:04:05.000000000 +0800
-+++ src_mod/.objects	2018-05-18 10:53:21.000000000 +0800
++++ src_mod/.objects	2018-05-22 13:22:59.000000000 +0800
 @@ -129,6 +129,7 @@
+ 	pardens.o \
+ 	optics.o \
+ 	constr_cell_relax.o \
++        constrain.o \
+ 	stm.o \
+ 	finite_diff.o \
+ 	elpol.o \
+@@ -327,6 +328,7 @@
  	pardens.o \
  	optics.o \
  	constr_cell_relax.o \
@@ -11,7 +19,7 @@ diff -ruN src/.objects src_mod/.objects
  	elpol.o \
 diff -ruN src/constrain.F src_mod/constrain.F
 --- src/constrain.F	1970-01-01 08:00:00.000000000 +0800
-+++ src_mod/constrain.F	2018-05-18 10:53:21.000000000 +0800
++++ src_mod/constrain.F	2018-05-22 13:22:59.000000000 +0800
 @@ -0,0 +1,252 @@
 +!*********************************************************************
 +!
@@ -267,17 +275,8 @@ diff -ruN src/constrain.F src_mod/constrain.F
 +
 diff -ruN src/main.F src_mod/main.F
 --- src/main.F	2017-04-20 17:03:58.000000000 +0800
-+++ src_mod/main.F	2018-05-18 10:53:21.000000000 +0800
-@@ -256,6 +256,8 @@
-       INTEGER :: TIU6, TIU0
-       INTEGER :: ISPECIAL=0         ! allows to select special undocumented features
-       INTEGER :: MDALGO=0           ! dublicates MDALGO in tbdyn
-+      INTEGER :: LOOPDONE           ! Add by Chengcheng Xiao, A convergence criteria for fixing bond length.
-+      REAL(kind=8) :: DETMP         ! Add by Chengcheng Xiao, A temporary item storing energy difference.
- !=======================================================================
- !  begin array dimensions ...
- !=======================================================================
-@@ -3125,6 +3127,9 @@
++++ src_mod/main.F	2018-05-22 13:22:59.000000000 +0800
+@@ -3125,6 +3125,9 @@
  ! add chain forces and constrain forces
  !=======================================================================
        CALL VCA_FORCE(T_INFO, TIFOR)
@@ -287,24 +286,7 @@ diff -ruN src/main.F src_mod/main.F
  
        IF (DYN%IBRION /=5 .AND. DYN%IBRION /=6  .AND. DYN%IBRION /=7 ) &
        CALL SET_SELECTED_FORCES_ZERO(T_INFO,DYN%VEL,TIFOR,LATT_CUR)
-@@ -3571,6 +3576,16 @@
- !  do relaxations using diverse algorithms
- !-----------------------------------------------------------------------
-         ! change of the energy between two ionic step used as stopping criterion
-+!-----------------------------------------------------------------------
-+! Add by Chengchegn Xiao, following block to determin the convergence
-+        LOOPDONE=.FALSE.
-+!        WRITE(*,*) DETMP,LOOPDONE
-+        IF (ABS(DETMP-(TOTEN-TOTENG))<0.00001) THEN
-+!          WRITE(*,*) "STABLE"
-+          LOOPDONE=.TRUE.
-+        ENDIF
-+        DETMP=TOTEN-TOTENG
-+!----------------------------------------------------------------------
-         INFO%LSTOP=(ABS(TOTEN-TOTENG)<DYN%EDIFFG)
-         
-         CALLMPI_C ( and_chain( LSTOP2 ))
-@@ -3664,6 +3679,9 @@
+@@ -3664,6 +3667,9 @@
          ELSE IF (DYN%IBRION==11) THEN
             CALL INPOS(LATT_CUR, T_INFO, DYN, IO%IU6, IO%IU0, INFO%LSTOP, WDES%COMM)
          ENDIF
@@ -314,15 +296,11 @@ diff -ruN src/main.F src_mod/main.F
  
  ! restrict volume for constant volume relaxation
          IF (DYN%ISIF==4 .OR. DYN%ISIF==5) THEN
-@@ -3691,7 +3709,10 @@
+@@ -3691,7 +3697,6 @@
             CALL WAVPRE(GRIDC,P,PRED,T_INFO,W,WDES,LATT_CUR,IO%LOPEN, &
                  CHTOT,RHOLM,N_MIX_PAW, CSTRF, LMDIM,CQIJ,INFO%LOVERL,IO%IU0)
          ENDIF
 -
-+!----------------------------------------------------------------------
-+! Add by Chengchegn Xiao to exit loop
-+        INFO%LSTOP=LOOPDONE
-+!----------------------------------------------------------------------
          ! use forces as stopping criterion if EDIFFG<0
          IF (DYN%EDIFFG<0) INFO%LSTOP=LSTOP2
          io_begin

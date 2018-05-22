@@ -15,13 +15,7 @@ ATOM1# ATOM2# BOND_LENGTH1
 ATOM3# ATOM4# BOND_LENGTH2
 ...
 ```
-Then a regulary relaxiation can be performed. 
-
-## Caveats
-
-1. The convergence criteria is based on energy difference between (`d E` in output log) two consecutive ionic steps, this is not always right.
-
-2. Force convergence (`EDIFFG`<0) not implemented.
+Then a regulary relaxiation can be performed.
 
 ## Notes
 
@@ -31,4 +25,6 @@ Then a regulary relaxiation can be performed.
 
 *3. This is just a trial fix, I have not (yet) get a clear picture the original intension of this interface. Any result obtained by this fix should be carefully checked by yourself.
 
-*4. A major part of this implementation was contributed by someone at GaTech (Whom I do not know...).
+*4. This patch only works on the latest version of VASP (currently VASP 5.4.4).
+
+*4. A major part of this implementation was contributed by someone at GaTech (Whom I do not know... Anyway, thank you very much!).

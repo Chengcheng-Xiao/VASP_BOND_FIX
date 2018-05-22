@@ -328,6 +328,7 @@ SOURCE_GPU =  \
 	pardens.o \
 	optics.o \
 	constr_cell_relax.o \
+        constrain.o \
 	stm.o \
 	finite_diff.o \
 	elpol.o \
