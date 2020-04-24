@@ -38,8 +38,12 @@ Then a regular relaxation can be performed.
 2. Convergence maybe slow, might want to loosen the convergence criteria
 
 ## Notes
-*1. No source file is shared.
-*2. The correctness of this patch has been checked with few simple cases.
-*3. Any result obtained by this fix should be carefully checked by yourself.
-*4. This patch only works on currently VASP 5.4.4.
-*4. A major part of this implementation was contributed by someone at GaTech.
+*1. No source file is shared.*
+
+*2. The correctness of this patch has been checked with few simple cases.*
+
+*3. Any result obtained by this fix should be carefully checked by yourself.*
+
+*4. This patch only works on currently VASP 5.4.4.*
+
+*5. A major part of this implementation was contributed by someone at GaTech.*
