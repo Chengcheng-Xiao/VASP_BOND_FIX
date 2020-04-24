@@ -1,9 +1,0 @@
-# ignore files
-!/.gitignore
-main_analysis
-2020-04-24-constrain.F
-2020-04-24-main.F
-constrain.F
-main_constrain.f90
-main.F
-.*
