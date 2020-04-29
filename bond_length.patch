@@ -1,6 +1,6 @@
 diff -ruN src/constrain.F src_mod/constrain.F
 --- src/constrain.F	1970-01-01 01:00:00.000000000 +0100
-+++ src_mod/constrain.F	2020-04-24 09:55:53.000000000 +0100
++++ src_mod/constrain.F	2020-04-29 16:32:36.000000000 +0100
 @@ -0,0 +1,243 @@
 +!*********************************************************************
 +!
@@ -247,7 +247,7 @@ diff -ruN src/constrain.F src_mod/constrain.F
 +
 diff -ruN src/main.F src_mod/main.F
 --- src/main.F	2017-04-20 10:03:58.000000000 +0100
-+++ src_mod/main.F	2020-04-24 09:55:28.000000000 +0100
++++ src_mod/main.F	2020-04-29 16:32:36.000000000 +0100
 @@ -3125,6 +3125,32 @@
  ! add chain forces and constrain forces
  !=======================================================================
@@ -281,18 +281,22 @@ diff -ruN src/main.F src_mod/main.F
  
        IF (DYN%IBRION /=5 .AND. DYN%IBRION /=6  .AND. DYN%IBRION /=7 ) &
        CALL SET_SELECTED_FORCES_ZERO(T_INFO,DYN%VEL,TIFOR,LATT_CUR)
-@@ -3664,6 +3690,8 @@
-         ELSE IF (DYN%IBRION==11) THEN
-            CALL INPOS(LATT_CUR, T_INFO, DYN, IO%IU6, IO%IU0, INFO%LSTOP, WDES%COMM)
+@@ -3676,7 +3702,11 @@
+               LATT_CUR%A(3,I)=SCALEQ*LATT_CUR%A(3,I)
+            ENDDO
          ENDIF
-+! 2018-05-22 position constrain for fixing bond length
+-        CALL LATTIC(LATT_CUR)
++	CALL LATTIC(LATT_CUR)
++
++! 2020-04-28 position constrain for fixing bond length
 +        CALL CONSTRAIN_POSITION(T_INFO,DYN%POSION,LATT_CUR,IO)
- 
- ! restrict volume for constant volume relaxation
-         IF (DYN%ISIF==4 .OR. DYN%ISIF==5) THEN
++
+ !-----------------------------------------------------------------------
+ !  reinitialize the prediction algorithm for the wavefunction if needed
+ !-----------------------------------------------------------------------
 diff -ruN src/.objects src_mod/.objects
 --- src/.objects	2017-04-20 10:04:05.000000000 +0100
-+++ src_mod/.objects	2020-04-24 09:51:59.000000000 +0100
++++ src_mod/.objects	2020-04-29 16:32:36.000000000 +0100
 @@ -129,6 +129,7 @@
  	pardens.o \
  	optics.o \

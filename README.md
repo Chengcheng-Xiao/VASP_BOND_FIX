@@ -33,9 +33,13 @@ ATOM3# ATOM4# BOND_LENGTH2
 ```
 Then a regular relaxation can be performed.
 
+if `Selective-dynamics` on one of the constrained atoms, the bond length constrain will move the other atom,
+if no `Selective-dynamics` used on the constrained atoms, the bond length is distributed evenly to each atom according to the bond center (POS_1+POS_2)/2.
+
 ## Caveats
 1. Initial bond length should equal the one specified in `CONSTRAIN` file.
 2. Convergence maybe slow, might want to loosen the convergence criteria
+3. Be careful with variable cell calculation, we do not apply constrains on cell stress.
 
 ## Notes
 *1. No source file is shared.*
