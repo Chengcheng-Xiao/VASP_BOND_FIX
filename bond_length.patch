@@ -1,37 +1,46 @@
-diff -ruN src/constrain.F src_mod/constrain.F
+diff -bruN src/constrain.F ../vasp.5.4.4_mod/src/constrain.F
 --- src/constrain.F	1970-01-01 01:00:00.000000000 +0100
-+++ src_mod/constrain.F	2020-04-29 16:32:36.000000000 +0100
-@@ -0,0 +1,243 @@
++++ ../vasp.5.4.4_mod/src/constrain.F	2020-06-16 19:55:21.398889132 +0100
+@@ -0,0 +1,302 @@
 +!*********************************************************************
 +!
-+! subroutine to constrain force (added in GaTech for fixing bond length)
++! subroutine to constrain force
 +!
-+! Original Author: UNKONW
++! Original Author: UNKONW (GaTech)
 +! Modified by: Chengcheng-Xiao
 +! Email: iconxicon@me.com
++! 2020-06-16 added mass weighted average force.
 +! 2020-05-22 adapted to vasp 5.4.4
 +! 2020-04-23 add ability to fix multiple bonds
 +!*********************************************************************
 +
-+      SUBROUTINE RD_CONSTRAIN(NCONST,ION1,ION2,DIST12)
++      SUBROUTINE RD_CONSTRAIN(NCONST,ION1,ION2,DIST12,CONSTRAIN_START)
 +      USE lattice
 +      USE poscar
++      ! USE base
 +      IMPLICIT NONE
 +
-+
++      ! TYPE(in_struct) IO
 +      INTEGER ION1(99),ION2(99),NCONST
++      LOGICAL CONSTRAIN_START
 +      REAL(q)  DIST12(99)
 +      ION1=0
 +      ION2=0
 +      DIST12=0.0
 +
++      ! have file?
++      INQUIRE(FILE='CONSTRAIN',EXIST=CONSTRAIN_START)
++
++      IF (CONSTRAIN_START) THEN
 +      NCONST=0
 +      OPEN(UNIT=777,FILE='CONSTRAIN',STATUS='OLD',ERR=900)
 +      DO WHILE (.TRUE.)
 +         NCONST=NCONST+1
 +         READ(777,*,END=999) ION1(NCONST),ION2(NCONST),DIST12(NCONST)
++         ! IF (IO%IU0>=0) WRITE(IO%IU0,*) "have file", NCONST
 +      END DO
 +999   CLOSE(UNIT=777)
++      ENDIF
 +
 +!      OPEN(UNIT=777,FILE='CONSTRAIN',STATUS='OLD',ERR=900)
 +!      READ(777,*) ION1,ION2,DIST12
@@ -56,19 +65,29 @@ diff -ruN src/constrain.F src_mod/constrain.F
 +      REAL(q)  TIFOR(3,T_INFO%NIONS),VEL(3,T_INFO%NIONS)
 +      REAL(q)  POS(3,T_INFO%NIONS)
 +! local
-+      INTEGER ION1(99),ION2(99),NCONST,I
-+      REAL(q)  DIST12(99)
++      INTEGER ION1(99),ION2(99),NCONST,I,J
++      REAL(q) DIST12(99)
 +      REAL(q) DDIST12
-+      REAL(q) POS1(3),POS2(3),TANVEC(3),TANC
-+      REAL(q) TANF1,TANF2,TANAVEF
++      REAL(q) MASS1, MASS2
++      REAL(q) POS1(3),POS2(3),TANVEC(3),TANC,VTMP(3)
++      REAL(q) TANF1,TANF2,TANAVEF1,TANAVEF2
++      LOGICAL CONSTRAIN_START
 +
-+      CALL RD_CONSTRAIN(NCONST,ION1,ION2,DIST12)
-+!      IF ((ION1 .EQ. 0) .OR. (ION2 .EQ. 0) .OR. (DIST12 .EQ. 0._q)) THEN
-+!         WRITE(*,*) 'Failed to read CONSTRAIN.'
-+!         GOTO 800
-+!      ENDIF
++      CALL RD_CONSTRAIN(NCONST,ION1,ION2,DIST12,CONSTRAIN_START)
++
++      IF (.NOT. CONSTRAIN_START) THEN
++        GOTO 800
++      ENDIF
++
++      IF (ALL(ION1 .EQ. 0) .OR. ALL(ION2 .EQ. 0) .OR. ALL(DIST12 .EQ. 0._q)) THEN
++        IF (IO%IU0>=0) WRITE(IO%IU0,'(A,/,A)') ' ------------------------------- ', &
++                                              &'|** Failed to read CONSTRAIN. **|',&
++                                              &' ------------------------------- '
++        GOTO 800
++      ENDIF
++
 +      ! loop over all constrains
-+      DO I=1,NCONST
++      DO I=1,NCONST-1
 +          ! get atomic postion in Cart coord.
 +          POS1(1)=POS(1,ION1(I))
 +          POS1(2)=POS(2,ION1(I))
@@ -78,6 +97,11 @@ diff -ruN src/constrain.F src_mod/constrain.F
 +          POS2(2)=POS(2,ION2(I))
 +          POS2(3)=POS(3,ION2(I))
 +          CALL DIRKAR(1, POS2, LATT_CUR%A)
++
++          ! get atomic mass
++          MASS1=T_INFO%POMASS(T_INFO%ITYP(ION1(I)))
++          MASS2=T_INFO%POMASS(T_INFO%ITYP(ION2(I)))
++          ! IF (IO%IU0>=0) WRITE(IO%IU0,*) ' mass1=',MASS1,' mass2=',MASS2, ' NCONT', I
 +
 +          ! get direction vector -> TANVEC
 +          ! get distance         -> DIST12
@@ -101,7 +125,8 @@ diff -ruN src/constrain.F src_mod/constrain.F
 +          TANF2=TANF2+TIFOR(3,ION2(I))*TANVEC(3)
 +
 +          ! get average force on direction vector
-+          TANAVEF=(TANF1+TANF2)*0.5
++          TANAVEF1=(TANF1+TANF2)*(MASS1/(MASS1+MASS2))
++          TANAVEF2=(TANF1+TANF2)*(MASS2/(MASS1+MASS2))
 +
 +          ! subtract average force on direction vector from atomic force
 +          ! forces on atom are now orthorgonal to direction vec
@@ -115,18 +140,18 @@ diff -ruN src/constrain.F src_mod/constrain.F
 +          ! add back average force along direction vec so that they are equal on each atom.
 +          ! this makes atoms become rigid body.
 +          IF ((T_INFO%LSFOR(1,ION1(I))).AND.(T_INFO%LSFOR(1,ION2(I)))) THEN
-+             TIFOR(1,ION1(I))=TIFOR(1,ION1(I))+TANAVEF*TANVEC(1)
-+             TIFOR(1,ION2(I))=TIFOR(1,ION2(I))+TANAVEF*TANVEC(1)
++             TIFOR(1,ION1(I))=TIFOR(1,ION1(I))+TANAVEF1*TANVEC(1)
++             TIFOR(1,ION2(I))=TIFOR(1,ION2(I))+TANAVEF2*TANVEC(1)
 +!	     IF (IO%IU6>=0) WRITE(IO%IU6,'(X,A,F9.6,A,F9.6)') 'Force on Cart. X, Atom1:', TIFOR(1,ION1(I)), ' Atom2: ', TIFOR(1,ION2(I))
 +          ENDIF
 +          IF ((T_INFO%LSFOR(2,ION1(I))).AND.(T_INFO%LSFOR(2,ION2(I)))) THEN
-+             TIFOR(2,ION1(I))=TIFOR(2,ION1(I))+TANAVEF*TANVEC(2)
-+             TIFOR(2,ION2(I))=TIFOR(2,ION2(I))+TANAVEF*TANVEC(2)
++             TIFOR(2,ION1(I))=TIFOR(2,ION1(I))+TANAVEF1*TANVEC(2)
++             TIFOR(2,ION2(I))=TIFOR(2,ION2(I))+TANAVEF2*TANVEC(2)
 +!	     IF (IO%IU6>=0) WRITE(IO%IU6,'(X,A,F9.6,A,F9.6)') 'Force on Cart. Y, Atom1:',TIFOR(2,ION1(I)),' Atom2: ', TIFOR(2,ION2(I))
 +          ENDIF
 +          IF ((T_INFO%LSFOR(3,ION1(I))).AND.(T_INFO%LSFOR(3,ION2(I)))) THEN
-+             TIFOR(3,ION1(I))=TIFOR(3,ION1(I))+TANAVEF*TANVEC(3)
-+             TIFOR(3,ION2(I))=TIFOR(3,ION2(I))+TANAVEF*TANVEC(3)
++             TIFOR(3,ION1(I))=TIFOR(3,ION1(I))+TANAVEF1*TANVEC(3)
++             TIFOR(3,ION2(I))=TIFOR(3,ION2(I))+TANAVEF2*TANVEC(3)
 +!	     IF (IO%IU0>=0) WRITE(IO%IU0,'(X,A,F9.6,A,F9.6)') 'Force on Cart. Z, Atom1:',TIFOR(3,ION1(I)),' Atom2: ', TIFOR(3,ION2(I))
 +          ENDIF
 +
@@ -139,6 +164,32 @@ diff -ruN src/constrain.F src_mod/constrain.F
 +      END DO
 +      IF (IO%IU0>=0) WRITE(IO%IU0,'(X,A)') 'CONSTRAIN_FORCE is done.'
 +!      WRITE(*,*) 'CONSTRAIN_FORCE is done.'
++
++      ! 2020-04-24 write constrained force
++      wrtforce: IF (IO%IU6>=0 .AND. IO%NWRITE>=1) THEN
++      WRITE(IO%IU6,972)
++      DO J=1,T_INFO%NIONS
++        VTMP=T_INFO%POSION(1:3,J)
++        CALL  DIRKAR(1,VTMP,LATT_CUR%A)
++        WRITE(IO%IU6,976) VTMP,(TIFOR (I,J),I=1,3)
++      ENDDO
++
++      IF (IO%INTERACTIVE) THEN
++         WRITE(IO%IU0,'(A)') 'FORCES:'
++         DO J=1,T_INFO%NIONS
++            WRITE(IO%IU0,'(3F14.7)') (TIFOR (I,J),I=1,3)
++         ENDDO
++      ENDIF
++      WRITE(IO%IU6,977)
++
++      972     FORMAT( ' POSITION    ',35X,'CONSTRAINED TOTAL-FORCE (eV/Angst)'/ &
++      &          ' ----------------------------------------------', &
++      &          '-------------------------------------')
++      976     FORMAT((3F13.5,3X,3F14.6))
++      977     FORMAT(' ----------------------------------------------', &
++      &          '-------------------------------------')
++      ENDIF wrtforce
++
 +
 + 800  CONTINUE
 +      END SUBROUTINE
@@ -158,16 +209,24 @@ diff -ruN src/constrain.F src_mod/constrain.F
 +      REAL(q)  DIST12(99)
 +      REAL(q) DDIST12
 +      REAL(q) POS1(3),POS2(3),TANVEC(3),TANC
-+      REAL(q) TANF1,TANF2,TANAVEF(3)
++      LOGICAL CONSTRAIN_START
++      ! REAL(q) TANF1,TANF2,TANAVEF(3)
 +
-+      CALL RD_CONSTRAIN(NCONST,ION1,ION2,DIST12)
-+!      IF ((ION1 .EQ. 0) .OR. (ION2 .EQ. 0) .OR. (DIST12 .EQ. 0._q)) THEN
-+!         WRITE(*,*) 'Failed to read CONSTRAIN.'
-+!         GOTO 700
-+!      ENDIF
++      CALL RD_CONSTRAIN(NCONST,ION1,ION2,DIST12,CONSTRAIN_START)
++
++      IF (.NOT. CONSTRAIN_START) THEN
++        GOTO 700
++      ENDIF
++
++      IF (ALL(ION1 .EQ. 0) .OR. ALL(ION2 .EQ. 0) .OR. ALL(DIST12 .EQ. 0._q)) THEN
++        IF (IO%IU0>=0) WRITE(IO%IU0,'(A,/,A)') ' ------------------------------- ', &
++                                              &'|** Failed to read CONSTRAIN. **|',&
++                                              &' ------------------------------- '
++        GOTO 700
++      ENDIF
 +
 +      ! loop over all constrains
-+      DO I=1,NCONST
++      DO I=1,NCONST-1
 +          ! get atomic postion in Cart coord.
 +          POS1(1)=POS(1,ION1(I))
 +          POS1(2)=POS(2,ION1(I))
@@ -245,58 +304,32 @@ diff -ruN src/constrain.F src_mod/constrain.F
 + 700  CONTINUE
 +      END SUBROUTINE
 +
-diff -ruN src/main.F src_mod/main.F
+diff -bruN src/main.F ../vasp.5.4.4_mod/src/main.F
 --- src/main.F	2017-04-20 10:03:58.000000000 +0100
-+++ src_mod/main.F	2020-04-29 16:32:36.000000000 +0100
-@@ -3125,6 +3125,32 @@
++++ ../vasp.5.4.4_mod/src/main.F	2020-06-16 19:44:44.688094172 +0100
+@@ -3125,6 +3125,8 @@
  ! add chain forces and constrain forces
  !=======================================================================
        CALL VCA_FORCE(T_INFO, TIFOR)
-+! 2018-05-22 added for fixing bond length
++! 2018-05-22 CCX: added for fixing bond length
 +      CALL CONSTRAIN_FORCE(T_INFO,DYN%VEL,TIFOR,DYN%POSION,LATT_CUR,IO)
-+! 2020-04-24 write constrained force
-+wrtforce: IF (IO%IU6>=0 .AND. IO%NWRITE>=1) THEN
-+WRITE(IO%IU6,972)
-+DO J=1,T_INFO%NIONS
-+  VTMP=T_INFO%POSION(1:3,J)
-+  CALL  DIRKAR(1,VTMP,LATT_CUR%A)
-+  WRITE(IO%IU6,976) VTMP,(TIFOR (I,J),I=1,3)
-+ENDDO
-+
-+IF (IO%INTERACTIVE) THEN
-+   WRITE(IO%IU0,'(A)') 'FORCES:'
-+   DO J=1,T_INFO%NIONS
-+      WRITE(IO%IU0,'(3F14.7)') (TIFOR (I,J),I=1,3)
-+   ENDDO
-+ENDIF
-+WRITE(IO%IU6,977)
-+
-+972     FORMAT( ' POSITION    ',35X,'CONSTRAINED TOTAL-FORCE (eV/Angst)'/ &
-+&          ' ----------------------------------------------', &
-+&          '-------------------------------------')
-+976     FORMAT((3F13.5,3X,3F14.6))
-+977     FORMAT(' ----------------------------------------------', &
-+&          '-------------------------------------')
-+ENDIF wrtforce
  
        IF (DYN%IBRION /=5 .AND. DYN%IBRION /=6  .AND. DYN%IBRION /=7 ) &
        CALL SET_SELECTED_FORCES_ZERO(T_INFO,DYN%VEL,TIFOR,LATT_CUR)
-@@ -3676,7 +3702,11 @@
-               LATT_CUR%A(3,I)=SCALEQ*LATT_CUR%A(3,I)
+@@ -3677,6 +3679,10 @@
             ENDDO
          ENDIF
--        CALL LATTIC(LATT_CUR)
-+	CALL LATTIC(LATT_CUR)
+         CALL LATTIC(LATT_CUR)
 +
-+! 2020-04-28 position constrain for fixing bond length
++! 2020-04-28 CCX: position constrain for fixing bond length
 +        CALL CONSTRAIN_POSITION(T_INFO,DYN%POSION,LATT_CUR,IO)
 +
  !-----------------------------------------------------------------------
  !  reinitialize the prediction algorithm for the wavefunction if needed
  !-----------------------------------------------------------------------
-diff -ruN src/.objects src_mod/.objects
+diff -bruN src/.objects ../vasp.5.4.4_mod/src/.objects
 --- src/.objects	2017-04-20 10:04:05.000000000 +0100
-+++ src_mod/.objects	2020-04-29 16:32:36.000000000 +0100
++++ ../vasp.5.4.4_mod/src/.objects	2020-06-16 18:25:58.156853177 +0100
 @@ -129,6 +129,7 @@
  	pardens.o \
  	optics.o \
